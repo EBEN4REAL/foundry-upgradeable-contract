@@ -2,29 +2,27 @@
 pragma solidity ^0.8.19;
 
 import {Script} from "forge-std/Script.sol";
-import {console} from "forge-std/console.sol";
+import {BoxV1} from "../src/BoxV1.sol";
 import {BoxV2} from "../src/BoxV2.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 
 contract UpgradeBox is Script {
     function run() external returns (address) {
-        // HARDCODE YOUR PROXY ADDRESS
-        address proxyAddress = 0xC5328C51034c5Ff35BE146eA6F62298C82FE5533;
-        console.log("Using proxy address:", proxyAddress);
+        address mostRecentlyDeployedProxy = DevOpsTools.get_most_recent_deployment("ERC1967Proxy", block.chainid);
 
         vm.startBroadcast();
         BoxV2 newBox = new BoxV2();
-        address newImplementation = address(newBox);
-        console.log("New implementation address:", newImplementation);
         vm.stopBroadcast();
-        
-        // Perform upgrade with low-level call
+        address proxy = upgradeBox(mostRecentlyDeployedProxy, address(newBox));
+        return proxy;
+    }
+
+    function upgradeBox(address proxyAddress, address newBox) public returns (address) {
         vm.startBroadcast();
-        bytes memory callData = abi.encodeWithSignature("upgradeTo(address)", newImplementation);
-        (bool success, ) = proxyAddress.call(callData);
-        require(success, "Upgrade failed");
+        BoxV1 proxy = BoxV1(payable(proxyAddress));
+        proxy.upgradeTo(address(newBox));
         vm.stopBroadcast();
-        
-        console.log("Upgrade completed!");
-        return proxyAddress;
+        return address(proxy);
     }
 }
